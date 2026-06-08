@@ -296,7 +296,7 @@
 
     const rowStyle = 'display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; gap: 2px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; overflow: hidden !important; float: none !important; clear: none !important;';
     const labelStyle = 'font-weight: 600 !important; color: var(--theme-text-minor, #5d5d64) !important; min-width: 25px !important; max-width: 32px !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; overflow: hidden !important; white-space: nowrap !important; text-overflow: ellipsis !important; flex-shrink: 0 !important; height: auto !important; line-height: 1.2 !important;';
-    const valStyle = 'flex: 1 1 0% !important; min-width: 0 !important; text-align: left !important; white-space: nowrap !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; box-sizing: border-box !important; overflow: hidden !important; line-height: 1.2 !important;';
+    const valStyle = 'flex: 0 0 auto !important; min-width: max-content !important; text-align: left !important; white-space: nowrap !important; display: inline-flex !important; align-items: baseline !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; box-sizing: border-box !important; overflow: visible !important; line-height: 1.2 !important;';
     const bStyle = 'color: var(--theme-text-primary, #212022) !important; font-weight: bold !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; display: inline !important; height: auto !important; width: auto !important;';
 
     if (settings.showPer100g) {
@@ -467,11 +467,12 @@
       
       div[class*="ProductSnippet__"] .lavka-kbzhu-val,
       div[data-testid="product-card"] .lavka-kbzhu-val {
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
+        flex: 0 0 auto !important;
+        min-width: max-content !important;
         text-align: left !important;
         white-space: nowrap !important;
-        display: inline-block !important;
+        display: inline-flex !important;
+        align-items: baseline !important;
         position: relative !important;
         left: auto !important;
         right: auto !important;
@@ -479,7 +480,7 @@
         bottom: auto !important;
         height: auto !important;
         box-sizing: border-box !important;
-        overflow: hidden !important;
+        overflow: visible !important;
         line-height: 1.2 !important;
       }
       
