@@ -17,6 +17,7 @@
 
   // --- Настройки по умолчанию ---
   const DEFAULT_SETTINGS = {
+    enabled: true,
     requestDelayMs: 1000,// Задержка между запросами для предотвращения капчи/бана
     cacheExpirationDays: 7,
     showPer100g: true,// Показывать КБЖУ на 100 грамм
@@ -25,6 +26,13 @@
 
   const CACHE_KEY = 'lavka_kbzhu_cache';
   const SETTINGS_KEY = 'lavka_kbzhu_settings';
+  const KBZHU_MAX_FONT_SIZE = 10;
+  const KBZHU_MIN_FONT_SIZE = 7;
+  const KBZHU_FONT_STEP = 0.5;
+
+  const kbzhuResizeObserver = typeof ResizeObserver === 'function'
+    ? new ResizeObserver(entries => entries.forEach(entry => fitKbzhuRows(entry.target)))
+    : null;
 
   // --- Функции для работы с настройками ---
   function getSettings() {
@@ -45,6 +53,10 @@
     } catch (e) {
       console.error('[KbzhuScript] Ошибка сохранения настроек:', e);
     }
+  }
+
+  function isKbzhuEnabled() {
+    return getSettings().enabled !== false;
   }
 
   // --- Функции для работы с кэшем ---
@@ -188,17 +200,29 @@
   let isProcessingQueue = false;
 
   function addToQueue(slug) {
+    if (!isKbzhuEnabled()) return;
     if (fetchQueue.includes(slug)) return;
     fetchQueue.push(slug);
     triggerQueueProcessing();
   }
 
   function triggerQueueProcessing() {
+    if (!isKbzhuEnabled()) {
+      fetchQueue.length = 0;
+      isProcessingQueue = false;
+      return;
+    }
     if (isProcessingQueue) return;
     processNextInQueue();
   }
 
   async function processNextInQueue() {
+    if (!isKbzhuEnabled()) {
+      fetchQueue.length = 0;
+      isProcessingQueue = false;
+      return;
+    }
+
     if (fetchQueue.length === 0) {
       isProcessingQueue = false;
       return;
@@ -209,6 +233,11 @@
 
     try {
       const kbzhuData = await fetchProductKbzhu(slug);
+      if (!isKbzhuEnabled()) {
+        fetchQueue.length = 0;
+        isProcessingQueue = false;
+        return;
+      }
       if (kbzhuData) {
         saveToCache(slug, kbzhuData);
         updateCardsForSlug(slug, kbzhuData, 'done');
@@ -216,15 +245,26 @@
         updateCardsForSlug(slug, null, 'error');
       }
     } catch (err) {
+      if (!isKbzhuEnabled()) {
+        fetchQueue.length = 0;
+        isProcessingQueue = false;
+        return;
+      }
       console.error(`[KbzhuScript] Ошибка получения КБЖУ для ${slug}:`, err);
       updateCardsForSlug(slug, null, 'error');
     }
 
     const settings = getSettings();
+    if (settings.enabled === false) {
+      fetchQueue.length = 0;
+      isProcessingQueue = false;
+      return;
+    }
     setTimeout(processNextInQueue, settings.requestDelayMs);
   }
 
   function updateCardsForSlug(slug, kbzhuData, status) {
+    if (!isKbzhuEnabled()) return;
     const cards = document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]');
     cards.forEach(card => {
       const link = card.querySelector('a[data-type="product-card-link"]') || card.querySelector('a[href*="/good/"]');
@@ -266,6 +306,32 @@
     threshold: 0.01
   });
 
+  function fitKbzhuRows(kbzhuBox) {
+    kbzhuBox.querySelectorAll('.lavka-kbzhu-row').forEach(row => {
+      let fontSize = KBZHU_MAX_FONT_SIZE;
+      row.style.setProperty('font-size', `${fontSize}px`, 'important');
+
+      if (!row.clientWidth) return;
+
+      while (row.scrollWidth > row.clientWidth && fontSize > KBZHU_MIN_FONT_SIZE) {
+        fontSize = Math.max(KBZHU_MIN_FONT_SIZE, fontSize - KBZHU_FONT_STEP);
+        row.style.setProperty('font-size', `${fontSize}px`, 'important');
+      }
+    });
+  }
+
+  function scheduleKbzhuRowsFit(kbzhuBox) {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => fitKbzhuRows(kbzhuBox));
+    } else {
+      fitKbzhuRows(kbzhuBox);
+    }
+
+    if (kbzhuResizeObserver) {
+      kbzhuResizeObserver.observe(kbzhuBox);
+    }
+  }
+
   // --- Отрисовка интерфейса на карточках ---
   function renderKbzhu(card, data) {
     const infoEl = card.querySelector('div[class*="info__"]') || card;
@@ -273,11 +339,14 @@
 
     // Удаляем предыдущие блоки, если они есть
     const existing = card.querySelector('.lavka-kbzhu-box');
-    if (existing) existing.remove();
+    if (existing) {
+      if (kbzhuResizeObserver) kbzhuResizeObserver.unobserve(existing);
+      existing.remove();
+    }
 
     const kbzhuBox = document.createElement('div');
     kbzhuBox.className = 'lavka-kbzhu-box';
-    kbzhuBox.setAttribute('style', 'display: flex !important; flex-direction: column !important; gap: 3px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 6px 0 4px 0 !important; padding: 4px 6px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; color: var(--theme-text-minor, #5d5d64) !important; font-size: 10px !important; font-family: YS Text, system-ui, -apple-system, sans-serif !important; line-height: 1.2 !important; border: 1px solid rgba(0,0,0,0.03) !important; overflow: hidden !important; float: none !important; clear: both !important;');
+    kbzhuBox.setAttribute('style', 'display: flex !important; flex-direction: column !important; gap: 3px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 6px 0 4px 0 !important; padding: 4px 6px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; color: var(--theme-text-minor, #5d5d64) !important; font-size: 10px !important; font-family: YS Text, system-ui, -apple-system, sans-serif !important; line-height: 1.2 !important; border: 1px solid rgba(0,0,0,0.03) !important; overflow: hidden !important; container-type: inline-size !important; float: none !important; clear: both !important;');
 
     const settings = getSettings();
     let html = '';
@@ -294,7 +363,7 @@
       return Number(num.toFixed(1)) + suffix;
     };
 
-    const rowStyle = 'display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; gap: 2px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; overflow: hidden !important; float: none !important; clear: none !important;';
+    const rowStyle = 'display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; gap: 2px !important; font-size: clamp(7px, 4cqw, 10px) !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; overflow: hidden !important; float: none !important; clear: none !important;';
     const labelStyle = 'font-weight: 600 !important; color: var(--theme-text-minor, #5d5d64) !important; min-width: 25px !important; max-width: 32px !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; overflow: hidden !important; white-space: nowrap !important; text-overflow: ellipsis !important; flex-shrink: 0 !important; height: auto !important; line-height: 1.2 !important;';
     const valStyle = 'flex: 0 0 auto !important; min-width: max-content !important; text-align: left !important; white-space: nowrap !important; display: inline-flex !important; align-items: baseline !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; box-sizing: border-box !important; overflow: visible !important; line-height: 1.2 !important;';
     const bStyle = 'color: var(--theme-text-primary, #212022) !important; font-weight: bold !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; display: inline !important; height: auto !important; width: auto !important;';
@@ -332,6 +401,7 @@
     } else {
       infoEl.appendChild(kbzhuBox);
     }
+    scheduleKbzhuRowsFit(kbzhuBox);
   }
 
   function renderSkeleton(card) {
@@ -364,6 +434,7 @@
 
   // --- Обработка карточек ---
   function processCard(card) {
+    if (!isKbzhuEnabled()) return;
     if (card.getAttribute('data-kbzhu-status')) return;
 
     const link = card.querySelector('a[data-type="product-card-link"]') || card.querySelector('a[href*="/good/"]');
@@ -385,7 +456,25 @@
     intersectionObserver.observe(card);
   }
 
+  function removeKbzhuFromCards() {
+    fetchQueue.length = 0;
+    isProcessingQueue = false;
+    document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
+      intersectionObserver.unobserve(card);
+      card.removeAttribute('data-kbzhu-status');
+      const box = card.querySelector('.lavka-kbzhu-box');
+      if (box) {
+        if (kbzhuResizeObserver) kbzhuResizeObserver.unobserve(box);
+        box.remove();
+      }
+    });
+  }
+
   function scanForCards() {
+    if (!isKbzhuEnabled()) {
+      removeKbzhuFromCards();
+      return;
+    }
     const cards = document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]');
     cards.forEach(processCard);
   }
@@ -423,6 +512,7 @@
         width: 100% !important;
         max-width: 100% !important;
         overflow: hidden !important;
+        container-type: inline-size !important;
       }
       
       div[class*="ProductSnippet__"] .lavka-kbzhu-row,
@@ -432,6 +522,7 @@
         align-items: center !important;
         justify-content: space-between !important;
         gap: 2px !important;
+        font-size: clamp(7px, 4cqw, 10px) !important;
         position: relative !important;
         left: auto !important;
         right: auto !important;
@@ -686,6 +777,9 @@
         <span class="lavka-kbzhu-settings-close">&times;</span>
       </div>
       <div class="lavka-kbzhu-setting-row">
+        <label for="kbzhu-enabled-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-enabled-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.enabled !== false ? 'checked' : ''} /> Включить отображение и загрузку КБЖУ</label>
+      </div>
+      <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-delay-input" title="Пауза между фоновыми запросами страниц товаров">Задержка запросов (мс):</label>
         <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="200" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
@@ -739,6 +833,7 @@
 
     document.getElementById('kbzhu-save-btn').addEventListener('click', () => {
       const newSettings = {
+        enabled: document.getElementById('kbzhu-enabled-chk').checked,
         requestDelayMs: parseInt(document.getElementById('kbzhu-delay-input').value) || 1000,
         cacheExpirationDays: parseInt(document.getElementById('kbzhu-cache-input').value) || 7,
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
@@ -746,6 +841,11 @@
       };
       saveSettings(newSettings);
       panel.classList.remove('active');
+
+      if (!newSettings.enabled) {
+        removeKbzhuFromCards();
+        return;
+      }
 
       // Принудительно перерисовываем все карточки в DOM
       const cache = getCache();

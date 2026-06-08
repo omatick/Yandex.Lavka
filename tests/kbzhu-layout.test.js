@@ -21,6 +21,9 @@ const inlineRowStyle = extractConst('rowStyle');
 const inlineValueStyle = extractConst('valStyle');
 const cssRowRule = extractCssRule('div[class*="ProductSnippet__"] .lavka-kbzhu-row,');
 const cssValueRule = extractCssRule('div[class*="ProductSnippet__"] .lavka-kbzhu-val,');
+const inlineBoxStyle = script.match(/kbzhuBox\.setAttribute\('style', '([^']+)'\);/);
+
+assert(inlineBoxStyle, 'Could not find inline KBZHU box style');
 
 for (const [source, style] of [
   ['inline row style', inlineRowStyle],
@@ -53,3 +56,29 @@ for (const [source, style] of [
     `${source} should not clip digits inside a nutrition value`
   );
 }
+
+for (const [source, style] of [
+  ['inline box style', inlineBoxStyle[1]],
+  ['injected box CSS', extractCssRule('div[class*="ProductSnippet__"] .lavka-kbzhu-box,')],
+]) {
+  assert.match(
+    style,
+    /container-type:\s*inline-size !important/,
+    `${source} should expose card width for responsive row sizing`
+  );
+}
+
+assert.match(script, /const KBZHU_MAX_FONT_SIZE = 10;/, 'Expected max row font-size constant');
+assert.match(script, /const KBZHU_MIN_FONT_SIZE = 7;/, 'Expected min row font-size constant');
+assert.match(script, /function fitKbzhuRows\(kbzhuBox\)/, 'Expected a row font-size fitting helper');
+assert.match(script, /scrollWidth > row\.clientWidth/, 'Fitting helper should detect row overflow');
+assert.match(script, /fitKbzhuRows\(kbzhuBox\);/, 'Rendered KBZHU rows should be fitted after insertion');
+
+assert.match(script, /enabled:\s*true/, 'Default settings should enable KBZHU loading and rendering');
+assert.match(script, /function isKbzhuEnabled\(\)/, 'Expected helper for the global KBZHU enabled flag');
+assert.match(script, /function removeKbzhuFromCards\(\)/, 'Expected helper to remove rendered KBZHU blocks when disabled');
+assert.match(script, /if \(!isKbzhuEnabled\(\)\) return;/, 'Queueing should stop when KBZHU is disabled');
+assert.match(script, /fetchQueue\.length = 0;/, 'Pending requests should be discarded when KBZHU is disabled');
+assert.match(script, /if \(!isKbzhuEnabled\(\)\) \{\s*removeKbzhuFromCards\(\);\s*return;\s*\}/, 'Card scanning should clean up and stop when disabled');
+assert.match(script, /id="kbzhu-enabled-chk"/, 'Settings UI should include a global enable checkbox');
+assert.match(script, /enabled: document\.getElementById\('kbzhu-enabled-chk'\)\.checked/, 'Settings save should persist the global enable flag');
