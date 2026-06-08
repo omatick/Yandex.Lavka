@@ -1,13 +1,15 @@
 // ==UserScript==
 // @name         Яндекс Лавка — КБЖУ в каталоге
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.3
 // @description  Отображает калорийность, белки, жиры и углеводы (КБЖУ) прямо в карточках товаров каталога Яндекс Лавки. Включает кэширование, ограничение частоты запросов для защиты от блокировок и панель настроек.
 // @author       Antigravity
 // @match        *://*.lavka.yandex.ru/*
 // @match        *://*.yandex.ru/lavka/*
 // @grant        none
 // @run-at       document-end
+// @updateURL    https://raw.githubusercontent.com/omatick/Yandex.Lavka/main/tampermonkey_script.js
+// @downloadURL  https://raw.githubusercontent.com/omatick/Yandex.Lavka/main/tampermonkey_script.js
 // ==/UserScript==
 
 (function() {
@@ -15,10 +17,10 @@
 
   // --- Настройки по умолчанию ---
   const DEFAULT_SETTINGS = {
-    requestDelayMs: 1000, // Задержка между запросами для предотвращения капчи/бана
+    requestDelayMs: 1000,// Задержка между запросами для предотвращения капчи/бана
     cacheExpirationDays: 7,
-    showPer100g: true, // Показывать КБЖУ на 100 грамм
-    showPerPortion: true // Показывать КБЖУ на порцию (если доступно)
+    showPer100g: true,// Показывать КБЖУ на 100 грамм
+    showPerPortion: true// Показывать КБЖУ на порцию (если доступно)
   };
 
   const CACHE_KEY = 'lavka_kbzhu_cache';
@@ -88,6 +90,16 @@
     } catch (e) {
       console.error('[KbzhuScript] Не удалось записать кэш:', e);
     }
+  }
+
+  function clearCache() {
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch (e) {}
+  }
+
+  function getCacheCount() {
+    return Object.keys(getCache()).length;
   }
 
   // --- Вспомогательные функции ---
@@ -263,9 +275,9 @@
     const existing = card.querySelector('.lavka-kbzhu-box');
     if (existing) existing.remove();
 
-    const kbzhuBox = document.createElement('kbzhubox');
+    const kbzhuBox = document.createElement('div');
     kbzhuBox.className = 'lavka-kbzhu-box';
-    kbzhuBox.setAttribute('style', 'display: flex !important; flex-direction: column !important; gap: 3px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 4px 0 !important; padding: 5px 6px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; color: var(--theme-text-minor, #5d5d64) !important; font-size: 10px !important; font-family: YS Text, system-ui, -apple-system, sans-serif !important; line-height: 1.3 !important; border: 1px solid rgba(0,0,0,0.03) !important;');
+    kbzhuBox.setAttribute('style', 'display: flex !important; flex-direction: column !important; gap: 3px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 6px 0 4px 0 !important; padding: 4px 6px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; color: var(--theme-text-minor, #5d5d64) !important; font-size: 10px !important; font-family: YS Text, system-ui, -apple-system, sans-serif !important; line-height: 1.2 !important; border: 1px solid rgba(0,0,0,0.03) !important; overflow: hidden !important; float: none !important; clear: both !important;');
 
     const settings = getSettings();
     let html = '';
@@ -282,32 +294,32 @@
       return Number(num.toFixed(1)) + suffix;
     };
 
-    const rowStyle = 'display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; gap: 2px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; width: 100% !important; max-width: 100% !important;';
-    const labelStyle = 'font-weight: 600 !important; color: var(--theme-text-minor, #5d5d64) !important; min-width: 26px !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important;';
-    const valStyle = 'flex: 1 !important; text-align: left !important; white-space: nowrap !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important;';
-    const bStyle = 'color: var(--theme-text-primary, #212022) !important;';
+    const rowStyle = 'display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between !important; gap: 2px !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; overflow: hidden !important; float: none !important; clear: none !important;';
+    const labelStyle = 'font-weight: 600 !important; color: var(--theme-text-minor, #5d5d64) !important; min-width: 25px !important; max-width: 32px !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; overflow: hidden !important; white-space: nowrap !important; text-overflow: ellipsis !important; flex-shrink: 0 !important; height: auto !important; line-height: 1.2 !important;';
+    const valStyle = 'flex: 1 1 0% !important; min-width: 0 !important; text-align: left !important; white-space: nowrap !important; display: inline-block !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; box-sizing: border-box !important; overflow: hidden !important; line-height: 1.2 !important;';
+    const bStyle = 'color: var(--theme-text-primary, #212022) !important; font-weight: bold !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; display: inline !important; height: auto !important; width: auto !important;';
 
     if (settings.showPer100g) {
       html += `
-        <kbzhurow style="${rowStyle}">
-          <kbzhulabel style="${labelStyle}">100г:</kbzhulabel>
-          <kbzhuval style="${valStyle}">🔥 <b style="${bStyle}">${formatVal(data.calories.per100g, '', true)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">Б <b style="${bStyle}">${formatVal(data.protein.per100g)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">Ж <b style="${bStyle}">${formatVal(data.fat.per100g)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">У <b style="${bStyle}">${formatVal(data.carbohydrate.per100g)}</b></kbzhuval>
-        </kbzhurow>
+        <div class="lavka-kbzhu-row" style="${rowStyle}">
+          <span class="lavka-kbzhu-label" style="${labelStyle}">100г</span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">🔥<b style="${bStyle}">${formatVal(data.calories.per100g, '', true)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">Б<b style="${bStyle}">${formatVal(data.protein.per100g)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">Ж<b style="${bStyle}">${formatVal(data.fat.per100g)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">У<b style="${bStyle}">${formatVal(data.carbohydrate.per100g)}</b></span>
+        </div>
       `;
     }
 
     if (settings.showPerPortion && hasPortion) {
       html += `
-        <kbzhurow style="${rowStyle}">
-          <kbzhulabel style="${labelStyle}">Порц:</kbzhulabel>
-          <kbzhuval style="${valStyle}">🔥 <b style="${bStyle}">${formatVal(data.calories.perPortion, '', true)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">Б <b style="${bStyle}">${formatVal(data.protein.perPortion)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">Ж <b style="${bStyle}">${formatVal(data.fat.perPortion)}</b></kbzhuval>
-          <kbzhuval style="${valStyle}">У <b style="${bStyle}">${formatVal(data.carbohydrate.perPortion)}</b></kbzhuval>
-        </kbzhurow>
+        <div class="lavka-kbzhu-row" style="${rowStyle}">
+          <span class="lavka-kbzhu-label" style="${labelStyle}">Порц</span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">🔥<b style="${bStyle}">${formatVal(data.calories.perPortion, '', true)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">Б<b style="${bStyle}">${formatVal(data.protein.perPortion)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">Ж<b style="${bStyle}">${formatVal(data.fat.perPortion)}</b></span>
+          <span class="lavka-kbzhu-val" style="${valStyle}">У<b style="${bStyle}">${formatVal(data.carbohydrate.perPortion)}</b></span>
+        </div>
       `;
     }
 
@@ -328,10 +340,10 @@
 
     if (card.querySelector('.lavka-kbzhu-box')) return;
 
-    const skeleton = document.createElement('kbzhubox');
+    const skeleton = document.createElement('div');
     skeleton.className = 'lavka-kbzhu-box lavka-kbzhu-skeleton';
-    skeleton.setAttribute('style', 'display: flex !important; justify-content: center !important; align-items: center !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 4px 0 !important; padding: 8px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; border: 1px solid rgba(0,0,0,0.03) !important;');
-    skeleton.innerHTML = `<kbzhurow class="lavka-kbzhu-skeleton-pulse" style="animation: lavka-kbzhu-pulse 1.5s infinite ease-in-out !important; font-weight: 500 !important; text-align: center !important; color: var(--theme-text-minor, #5d5d64) !important; width: 100% !important; display: block !important; font-size: 10px !important; justify-content: center !important;">КБЖУ: загрузка...</kbzhurow>`;
+    skeleton.setAttribute('style', 'display: flex !important; justify-content: center !important; align-items: center !important; position: relative !important; left: auto !important; right: auto !important; top: auto !important; bottom: auto !important; height: auto !important; min-height: 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; margin: 6px 0 4px 0 !important; padding: 6px !important; border-radius: 6px !important; background-color: var(--theme-bg-minor, #f5f5f7) !important; border: 1px solid rgba(0,0,0,0.03) !important; overflow: hidden !important;');
+    skeleton.innerHTML = `<div class="lavka-kbzhu-skeleton-pulse" style="animation: lavka-kbzhu-pulse 1.5s infinite ease-in-out !important; font-weight: 500 !important; text-align: center !important; color: var(--theme-text-minor, #5d5d64) !important; width: 100% !important; display: block !important; font-size: 10px !important; position: relative !important; left: auto !important; top: auto !important; height: auto !important; line-height: 1.2 !important;">КБЖУ: загрузка...</div>`;
 
     titleContainer.parentNode.insertBefore(skeleton, titleContainer.nextSibling);
   }
@@ -373,6 +385,11 @@
     intersectionObserver.observe(card);
   }
 
+  function scanForCards() {
+    const cards = document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]');
+    cards.forEach(processCard);
+  }
+
   // --- Внедрение стилей CSS ---
   function injectStyles() {
     if (document.getElementById('lavka-kbzhu-styles')) return;
@@ -380,20 +397,20 @@
     const style = document.createElement('style');
     style.id = 'lavka-kbzhu-styles';
     style.textContent = `
-      div[class*="ProductSnippet__"] kbzhubox.lavka-kbzhu-box,
-      div[data-testid="product-card"] kbzhubox.lavka-kbzhu-box {
+      div[class*="ProductSnippet__"] .lavka-kbzhu-box,
+      div[data-testid="product-card"] .lavka-kbzhu-box {
         margin-top: 6px !important;
-        margin-bottom: 6px !important;
-        padding: 6px 8px !important;
-        border-radius: 8px !important;
-        font-size: 11px !important;
+        margin-bottom: 4px !important;
+        padding: 4px 6px !important;
+        border-radius: 6px !important;
+        font-size: 10px !important;
         font-family: YS Text, system-ui, -apple-system, sans-serif !important;
-        line-height: 1.4 !important;
+        line-height: 1.2 !important;
         background-color: var(--theme-bg-minor, #f5f5f7) !important;
         color: var(--theme-text-minor, #5d5d64) !important;
         display: flex !important;
         flex-direction: column !important;
-        gap: 4px !important;
+        gap: 3px !important;
         border: 1px solid rgba(0,0,0,0.03) !important;
         box-sizing: border-box !important;
         position: relative !important;
@@ -404,40 +421,54 @@
         height: auto !important;
         min-height: 0 !important;
         width: 100% !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
       }
       
-      div[class*="ProductSnippet__"] kbzhubox.lavka-kbzhu-box kbzhurow,
-      div[data-testid="product-card"] kbzhubox.lavka-kbzhu-box kbzhurow {
+      div[class*="ProductSnippet__"] .lavka-kbzhu-row,
+      div[data-testid="product-card"] .lavka-kbzhu-row {
         display: flex !important;
         flex-direction: row !important;
         align-items: center !important;
         justify-content: space-between !important;
-        gap: 4px !important;
+        gap: 2px !important;
         position: relative !important;
         left: auto !important;
         right: auto !important;
         top: auto !important;
         bottom: auto !important;
         height: auto !important;
+        min-height: 0 !important;
         width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
       }
       
-      div[class*="ProductSnippet__"] kbzhubox.lavka-kbzhu-box kbzhulabel,
-      div[data-testid="product-card"] kbzhubox.lavka-kbzhu-box kbzhulabel {
+      div[class*="ProductSnippet__"] .lavka-kbzhu-label,
+      div[data-testid="product-card"] .lavka-kbzhu-label {
         font-weight: 600 !important;
         color: var(--theme-text-minor, #5d5d64) !important;
-        min-width: 32px !important;
+        min-width: 25px !important;
+        max-width: 32px !important;
         display: inline-block !important;
         position: relative !important;
         left: auto !important;
         right: auto !important;
         top: auto !important;
         bottom: auto !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        flex-shrink: 0 !important;
+        height: auto !important;
+        line-height: 1.2 !important;
       }
       
-      div[class*="ProductSnippet__"] kbzhubox.lavka-kbzhu-box kbzhuval,
-      div[data-testid="product-card"] kbzhubox.lavka-kbzhu-box kbzhuval {
-        flex: 1 !important;
+      div[class*="ProductSnippet__"] .lavka-kbzhu-val,
+      div[data-testid="product-card"] .lavka-kbzhu-val {
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
         text-align: left !important;
         white-space: nowrap !important;
         display: inline-block !important;
@@ -446,11 +477,24 @@
         right: auto !important;
         top: auto !important;
         bottom: auto !important;
+        height: auto !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        line-height: 1.2 !important;
       }
       
-      div[class*="ProductSnippet__"] kbzhubox.lavka-kbzhu-box kbzhuval b,
-      div[data-testid="product-card"] kbzhubox.lavka-kbzhu-box kbzhuval b {
+      div[class*="ProductSnippet__"] .lavka-kbzhu-val b,
+      div[data-testid="product-card"] .lavka-kbzhu-val b {
         color: var(--theme-text-primary, #212022) !important;
+        font-weight: bold !important;
+        position: relative !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        bottom: auto !important;
+        display: inline !important;
+        height: auto !important;
+        width: auto !important;
       }
       
       @keyframes lavka-kbzhu-pulse {
@@ -649,10 +693,10 @@
         <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="1" max="90" value="${settings.cacheExpirationDays}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
-        <label for="kbzhu-100g-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important;"><input type="checkbox" id="kbzhu-100g-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; position: static !important; cursor: pointer !important; accent-color: #fce000 !important;" ${settings.showPer100g ? 'checked' : ''} /> Показывать на 100 г</label>
+        <label for="kbzhu-100g-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-100g-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPer100g ? 'checked' : ''} /> Показывать на 100 г</label>
       </div>
       <div class="lavka-kbzhu-setting-row">
-        <label for="kbzhu-portion-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important;"><input type="checkbox" id="kbzhu-portion-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; position: static !important; cursor: pointer !important; accent-color: #fce000 !important;" ${settings.showPerPortion ? 'checked' : ''} /> Показывать на порцию</label>
+        <label for="kbzhu-portion-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-portion-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPerPortion ? 'checked' : ''} /> Показывать на порцию</label>
       </div>
       <div class="lavka-kbzhu-info-text">
         Загружено товаров в кэш: <span id="kbzhu-cache-count">${cacheCount}</span>
