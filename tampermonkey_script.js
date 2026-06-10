@@ -21,7 +21,15 @@
     requestDelayMs: 1000,// Задержка между запросами для предотвращения капчи/бана
     cacheExpirationDays: 7,
     showPer100g: true,// Показывать КБЖУ на 100 грамм
-    showPerPortion: true// Показывать КБЖУ на порцию (если доступно)
+    showPerPortion: true,// Показывать КБЖУ на порцию (если доступно)
+    highlightEnabled: false,
+    highlightMode: 'perPortion', // 'per100g' or 'perPortion'
+    highlightCriteria: {
+      calories: { from: '', to: '' },
+      protein: { from: '', to: '' },
+      fat: { from: '', to: '' },
+      carbohydrate: { from: '', to: '' }
+    }
   };
 
   const CACHE_KEY = 'lavka_kbzhu_cache';
@@ -39,7 +47,15 @@
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored);
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          highlightCriteria: {
+            ...DEFAULT_SETTINGS.highlightCriteria,
+            ...(parsed.highlightCriteria || {})
+          }
+        };
       }
     } catch (e) {
       console.error('[KbzhuScript] Ошибка чтения настроек:', e);
@@ -402,6 +418,43 @@
       infoEl.appendChild(kbzhuBox);
     }
     scheduleKbzhuRowsFit(kbzhuBox);
+
+    // Apply Highlight
+    if (settings.highlightEnabled) {
+      let isHighlighted = true;
+      const targetMode = settings.highlightMode; // 'per100g' or 'perPortion'
+
+      const checkCriteria = (paramName, criteria) => {
+        if (!criteria.from && !criteria.to) return true; // not set -> ignore parameter
+
+        const rawVal = data[paramName]?.[targetMode];
+        if (!rawVal) return false;
+
+        const val = parseFloat(rawVal.replace(',', '.'));
+        if (isNaN(val)) return false;
+
+        const fromVal = criteria.from === '' ? 0 : parseFloat(criteria.from);
+        const toVal = criteria.to === '' ? NaN : parseFloat(criteria.to);
+
+        if (!isNaN(fromVal) && val < fromVal) return false;
+        if (!isNaN(toVal) && val > toVal) return false;
+
+        return true;
+      };
+
+      if (!checkCriteria('calories', settings.highlightCriteria.calories)) isHighlighted = false;
+      if (!checkCriteria('protein', settings.highlightCriteria.protein)) isHighlighted = false;
+      if (!checkCriteria('fat', settings.highlightCriteria.fat)) isHighlighted = false;
+      if (!checkCriteria('carbohydrate', settings.highlightCriteria.carbohydrate)) isHighlighted = false;
+
+      if (isHighlighted) {
+        card.classList.add('lavka-kbzhu-highlighted');
+      } else {
+        card.classList.remove('lavka-kbzhu-highlighted');
+      }
+    } else {
+      card.classList.remove('lavka-kbzhu-highlighted');
+    }
   }
 
   function renderSkeleton(card) {
@@ -462,6 +515,7 @@
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
+      card.classList.remove('lavka-kbzhu-highlighted');
       const box = card.querySelector('.lavka-kbzhu-box');
       if (box) {
         if (kbzhuResizeObserver) kbzhuResizeObserver.unobserve(box);
@@ -653,6 +707,8 @@
         gap: 14px;
         color: var(--theme-text-primary, #212022);
         box-sizing: border-box;
+        max-height: 85vh;
+        overflow-y: auto;
       }
       .lavka-kbzhu-settings-panel.active {
         display: flex;
@@ -746,6 +802,11 @@
         text-align: center;
         margin-top: 4px;
       }
+
+      .lavka-kbzhu-highlighted {
+        box-shadow: 0 0 0 4px #fce000, 0 4px 12px rgba(252,224,0,0.4) !important;
+        border-radius: 12px;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -793,6 +854,38 @@
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-portion-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-portion-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPerPortion ? 'checked' : ''} /> Показывать на порцию</label>
       </div>
+      <hr style="margin: 4px 0; border: 0; border-top: 1px solid rgba(0,0,0,0.08);" />
+      <div style="font-weight: 600; font-size: 14px;">Подсветка товаров по КБЖУ</div>
+
+      <div class="lavka-kbzhu-setting-row">
+        <label for="kbzhu-highlight-enabled-chk"><input type="checkbox" id="kbzhu-highlight-enabled-chk" class="lavka-kbzhu-setting-checkbox" ${settings.highlightEnabled ? 'checked' : ''} /> Подсветить</label>
+      </div>
+
+      <div class="lavka-kbzhu-setting-row" style="justify-content: flex-start; gap: 15px;">
+        <label><input type="radio" name="kbzhu-highlight-mode" value="per100g" class="lavka-kbzhu-setting-checkbox" ${settings.highlightMode === 'per100g' ? 'checked' : ''} /> На 100 грамм</label>
+        <label><input type="radio" name="kbzhu-highlight-mode" value="perPortion" class="lavka-kbzhu-setting-checkbox" ${settings.highlightMode === 'perPortion' ? 'checked' : ''} /> На блюдо</label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: center; font-size: 13px;">
+        <div></div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">от</div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">до</div>
+
+        <div>Калории:</div>
+        <input type="number" id="hl-cal-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.from}" placeholder="0" />
+        <input type="number" id="hl-cal-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.to}" placeholder="∞" />
+
+        <div>Белки:</div>
+        <input type="number" id="hl-prot-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.from}" placeholder="0" />
+        <input type="number" id="hl-prot-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.to}" placeholder="∞" />
+
+        <div>Жиры:</div>
+        <input type="number" id="hl-fat-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.from}" placeholder="0" />
+        <input type="number" id="hl-fat-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.to}" placeholder="∞" />
+
+        <div>Углеводы:</div>
+        <input type="number" id="hl-carb-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.from}" placeholder="0" />
+        <input type="number" id="hl-carb-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.to}" placeholder="∞" />
+      </div>
+
       <div class="lavka-kbzhu-info-text">
         Загружено товаров в кэш: <span id="kbzhu-cache-count">${cacheCount}</span>
       </div>
@@ -837,7 +930,27 @@
         requestDelayMs: parseInt(document.getElementById('kbzhu-delay-input').value) || 1000,
         cacheExpirationDays: parseInt(document.getElementById('kbzhu-cache-input').value) || 7,
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
-        showPerPortion: document.getElementById('kbzhu-portion-chk').checked
+        showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
+        highlightEnabled: document.getElementById('kbzhu-highlight-enabled-chk').checked,
+        highlightMode: document.querySelector('input[name="kbzhu-highlight-mode"]:checked').value,
+        highlightCriteria: {
+          calories: {
+            from: document.getElementById('hl-cal-from').value,
+            to: document.getElementById('hl-cal-to').value
+          },
+          protein: {
+            from: document.getElementById('hl-prot-from').value,
+            to: document.getElementById('hl-prot-to').value
+          },
+          fat: {
+            from: document.getElementById('hl-fat-from').value,
+            to: document.getElementById('hl-fat-to').value
+          },
+          carbohydrate: {
+            from: document.getElementById('hl-carb-from').value,
+            to: document.getElementById('hl-carb-to').value
+          }
+        }
       };
       saveSettings(newSettings);
       panel.classList.remove('active');
