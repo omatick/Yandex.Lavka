@@ -988,6 +988,7 @@
           } else if (slug) {
             // Если КБЖУ нет в кэше (или срок истек/равен 0), сбрасываем статус, чтобы скрипт перезапросил данные
             card.removeAttribute('data-kbzhu-status');
+            card.classList.remove('lavka-kbzhu-highlighted');
             const box = card.querySelector('.lavka-kbzhu-box');
             if (box) box.remove();
           }
