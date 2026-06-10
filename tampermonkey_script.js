@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Яндекс Лавка — КБЖУ в каталоге
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Отображает калорийность, белки, жиры и углеводы (КБЖУ) прямо в карточках товаров каталога Яндекс Лавки. Включает кэширование, ограничение частоты запросов для защиты от блокировок и панель настроек.
 // @author       Antigravity
 // @match        *://*.lavka.yandex.ru/*
@@ -255,7 +255,9 @@
         return;
       }
       if (kbzhuData) {
-        saveToCache(slug, kbzhuData);
+        if (getSettings().cacheExpirationDays > 0) {
+          saveToCache(slug, kbzhuData);
+        }
         updateCardsForSlug(slug, kbzhuData, 'done');
       } else {
         updateCardsForSlug(slug, null, 'error');
@@ -917,6 +919,7 @@
         // Сбрасываем статус обработки на карточках в DOM
         document.querySelectorAll('[data-kbzhu-status]').forEach(card => {
           card.removeAttribute('data-kbzhu-status');
+          card.classList.remove('lavka-kbzhu-highlighted');
           const box = card.querySelector('.lavka-kbzhu-box');
           if (box) box.remove();
         });
