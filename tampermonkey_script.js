@@ -870,20 +870,20 @@
         <div></div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">от</div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">до</div>
 
         <div>Калории:</div>
-        <input type="number" id="hl-cal-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.from}" placeholder="0" />
-        <input type="number" id="hl-cal-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.to}" placeholder="∞" />
+        <input type="number" id="hl-cal-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.from}" placeholder="0" />
+        <input type="number" id="hl-cal-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.to}" placeholder="∞" />
 
         <div>Белки:</div>
-        <input type="number" id="hl-prot-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.from}" placeholder="0" />
-        <input type="number" id="hl-prot-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.to}" placeholder="∞" />
+        <input type="number" id="hl-prot-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.from}" placeholder="0" />
+        <input type="number" id="hl-prot-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.to}" placeholder="∞" />
 
         <div>Жиры:</div>
-        <input type="number" id="hl-fat-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.from}" placeholder="0" />
-        <input type="number" id="hl-fat-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.to}" placeholder="∞" />
+        <input type="number" id="hl-fat-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.from}" placeholder="0" />
+        <input type="number" id="hl-fat-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.to}" placeholder="∞" />
 
         <div>Углеводы:</div>
-        <input type="number" id="hl-carb-from" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.from}" placeholder="0" />
-        <input type="number" id="hl-carb-to" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.to}" placeholder="∞" />
+        <input type="number" id="hl-carb-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.from}" placeholder="0" />
+        <input type="number" id="hl-carb-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.to}" placeholder="∞" />
       </div>
 
       <div class="lavka-kbzhu-info-text">
@@ -925,32 +925,47 @@
     });
 
     document.getElementById('kbzhu-save-btn').addEventListener('click', () => {
+      const clamp = (val, min, max, fallback) => {
+        if (isNaN(val)) return fallback;
+        if (val < min) return min;
+        if (val > max) return max;
+        return val;
+      };
+
+      const sanitizeHighlight = (val) => {
+        if (val === '') return '';
+        const num = parseFloat(val);
+        if (isNaN(num) || num < 0) return '0';
+        return val;
+      };
+
       const delayInput = parseInt(document.getElementById('kbzhu-delay-input').value);
       const cacheInput = parseInt(document.getElementById('kbzhu-cache-input').value);
+
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
-        requestDelayMs: isNaN(delayInput) ? 1000 : delayInput,
-        cacheExpirationDays: isNaN(cacheInput) ? 7 : cacheInput,
+        requestDelayMs: clamp(delayInput, 0, 10000, 1000),
+        cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
         highlightEnabled: document.getElementById('kbzhu-highlight-enabled-chk').checked,
         highlightMode: document.querySelector('input[name="kbzhu-highlight-mode"]:checked').value,
         highlightCriteria: {
           calories: {
-            from: document.getElementById('hl-cal-from').value,
-            to: document.getElementById('hl-cal-to').value
+            from: sanitizeHighlight(document.getElementById('hl-cal-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-cal-to').value)
           },
           protein: {
-            from: document.getElementById('hl-prot-from').value,
-            to: document.getElementById('hl-prot-to').value
+            from: sanitizeHighlight(document.getElementById('hl-prot-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-prot-to').value)
           },
           fat: {
-            from: document.getElementById('hl-fat-from').value,
-            to: document.getElementById('hl-fat-to').value
+            from: sanitizeHighlight(document.getElementById('hl-fat-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-fat-to').value)
           },
           carbohydrate: {
-            from: document.getElementById('hl-carb-from').value,
-            to: document.getElementById('hl-carb-to').value
+            from: sanitizeHighlight(document.getElementById('hl-carb-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-carb-to').value)
           }
         }
       };
