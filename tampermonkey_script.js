@@ -408,17 +408,6 @@
       `;
     }
 
-    if (!html) return; // Если всё выключено в настройках
-
-    kbzhuBox.innerHTML = html;
-
-    if (titleContainer && titleContainer.parentNode) {
-      titleContainer.parentNode.insertBefore(kbzhuBox, titleContainer.nextSibling);
-    } else {
-      infoEl.appendChild(kbzhuBox);
-    }
-    scheduleKbzhuRowsFit(kbzhuBox);
-
     // Apply Highlight
     if (settings.highlightEnabled) {
       let isHighlighted = true;
@@ -455,6 +444,17 @@
     } else {
       card.classList.remove('lavka-kbzhu-highlighted');
     }
+
+    if (!html) return; // Если всё выключено в настройках
+
+    kbzhuBox.innerHTML = html;
+
+    if (titleContainer && titleContainer.parentNode) {
+      titleContainer.parentNode.insertBefore(kbzhuBox, titleContainer.nextSibling);
+    } else {
+      infoEl.appendChild(kbzhuBox);
+    }
+    scheduleKbzhuRowsFit(kbzhuBox);
   }
 
   function renderSkeleton(card) {
@@ -842,7 +842,7 @@
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-delay-input" title="Пауза между фоновыми запросами страниц товаров">Задержка запросов (мс):</label>
-        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="0" max="10000" step="100" value="${settings.requestDelayMs}" />
+        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="200" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-cache-input" title="Срок хранения загруженных КБЖУ в памяти браузера">Время кэша (дней):</label>
@@ -944,7 +944,7 @@
 
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
-        requestDelayMs: clamp(delayInput, 0, 10000, 1000),
+        requestDelayMs: clamp(delayInput, 200, 10000, 1000),
         cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
@@ -978,15 +978,15 @@
       }
 
       // Принудительно перерисовываем все карточки в DOM
-      const cache = getCache();
       document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
         const link = card.querySelector('a[data-type="product-card-link"]') || card.querySelector('a[href*="/good/"]');
         if (link) {
           const slug = getSlugFromUrl(link.href);
-          if (slug && cache[slug]) {
-            renderKbzhu(card, cache[slug]);
+          const cachedData = getFromCache(slug);
+          if (slug && cachedData) {
+            renderKbzhu(card, cachedData);
           } else if (slug) {
-            // Если КБЖУ нет в кэше, сбрасываем статус, чтобы скрипт перезапросил данные при необходимости
+            // Если КБЖУ нет в кэше (или срок истек/равен 0), сбрасываем статус, чтобы скрипт перезапросил данные
             card.removeAttribute('data-kbzhu-status');
             const box = card.querySelector('.lavka-kbzhu-box');
             if (box) box.remove();
