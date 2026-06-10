@@ -842,7 +842,7 @@
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-delay-input" title="Пауза между фоновыми запросами страниц товаров">Задержка запросов (мс):</label>
-        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="200" max="10000" step="100" value="${settings.requestDelayMs}" />
+        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="0" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-cache-input" title="Срок хранения загруженных КБЖУ в памяти браузера">Время кэша (дней):</label>
@@ -944,7 +944,7 @@
 
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
-        requestDelayMs: clamp(delayInput, 200, 10000, 1000),
+        requestDelayMs: clamp(delayInput, 0, 10000, 1000),
         cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
