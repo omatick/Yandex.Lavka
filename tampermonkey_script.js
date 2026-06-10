@@ -842,11 +842,11 @@
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-delay-input" title="Пауза между фоновыми запросами страниц товаров">Задержка запросов (мс):</label>
-        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="200" max="10000" step="100" value="${settings.requestDelayMs}" />
+        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="0" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-cache-input" title="Срок хранения загруженных КБЖУ в памяти браузера">Время кэша (дней):</label>
-        <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="1" max="90" value="${settings.cacheExpirationDays}" />
+        <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="0" max="1000" value="${settings.cacheExpirationDays}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-100g-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-100g-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPer100g ? 'checked' : ''} /> Показывать на 100 г</label>
@@ -925,10 +925,12 @@
     });
 
     document.getElementById('kbzhu-save-btn').addEventListener('click', () => {
+      const delayInput = parseInt(document.getElementById('kbzhu-delay-input').value);
+      const cacheInput = parseInt(document.getElementById('kbzhu-cache-input').value);
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
-        requestDelayMs: parseInt(document.getElementById('kbzhu-delay-input').value) || 1000,
-        cacheExpirationDays: parseInt(document.getElementById('kbzhu-cache-input').value) || 7,
+        requestDelayMs: isNaN(delayInput) ? 1000 : delayInput,
+        cacheExpirationDays: isNaN(cacheInput) ? 7 : cacheInput,
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
         highlightEnabled: document.getElementById('kbzhu-highlight-enabled-chk').checked,
