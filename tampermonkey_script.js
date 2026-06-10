@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Яндекс Лавка — КБЖУ в каталоге
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Отображает калорийность, белки, жиры и углеводы (КБЖУ) прямо в карточках товаров каталога Яндекс Лавки. Включает кэширование, ограничение частоты запросов для защиты от блокировок и панель настроек.
 // @author       Antigravity
 // @match        *://*.lavka.yandex.ru/*
@@ -21,7 +21,15 @@
     requestDelayMs: 1000,// Задержка между запросами для предотвращения капчи/бана
     cacheExpirationDays: 7,
     showPer100g: true,// Показывать КБЖУ на 100 грамм
-    showPerPortion: true// Показывать КБЖУ на порцию (если доступно)
+    showPerPortion: true,// Показывать КБЖУ на порцию (если доступно)
+    highlightEnabled: false,
+    highlightMode: 'perPortion', // 'per100g' or 'perPortion'
+    highlightCriteria: {
+      calories: { from: '', to: '' },
+      protein: { from: '', to: '' },
+      fat: { from: '', to: '' },
+      carbohydrate: { from: '', to: '' }
+    }
   };
 
   const CACHE_KEY = 'lavka_kbzhu_cache';
@@ -39,7 +47,15 @@
     try {
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
-        return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
+        const parsed = JSON.parse(stored);
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          highlightCriteria: {
+            ...DEFAULT_SETTINGS.highlightCriteria,
+            ...(parsed.highlightCriteria || {})
+          }
+        };
       }
     } catch (e) {
       console.error('[KbzhuScript] Ошибка чтения настроек:', e);
@@ -239,7 +255,9 @@
         return;
       }
       if (kbzhuData) {
-        saveToCache(slug, kbzhuData);
+        if (getSettings().cacheExpirationDays > 0) {
+          saveToCache(slug, kbzhuData);
+        }
         updateCardsForSlug(slug, kbzhuData, 'done');
       } else {
         updateCardsForSlug(slug, null, 'error');
@@ -392,6 +410,43 @@
       `;
     }
 
+    // Apply Highlight
+    if (settings.highlightEnabled) {
+      let isHighlighted = true;
+      const targetMode = settings.highlightMode; // 'per100g' or 'perPortion'
+
+      const checkCriteria = (paramName, criteria) => {
+        if (!criteria.from && !criteria.to) return true; // not set -> ignore parameter
+
+        const rawVal = data[paramName]?.[targetMode];
+        if (!rawVal) return false;
+
+        const val = parseFloat(rawVal.replace(',', '.'));
+        if (isNaN(val)) return false;
+
+        const fromVal = criteria.from === '' ? 0 : parseFloat(criteria.from);
+        const toVal = criteria.to === '' ? NaN : parseFloat(criteria.to);
+
+        if (!isNaN(fromVal) && val < fromVal) return false;
+        if (!isNaN(toVal) && val > toVal) return false;
+
+        return true;
+      };
+
+      if (!checkCriteria('calories', settings.highlightCriteria.calories)) isHighlighted = false;
+      if (!checkCriteria('protein', settings.highlightCriteria.protein)) isHighlighted = false;
+      if (!checkCriteria('fat', settings.highlightCriteria.fat)) isHighlighted = false;
+      if (!checkCriteria('carbohydrate', settings.highlightCriteria.carbohydrate)) isHighlighted = false;
+
+      if (isHighlighted) {
+        card.classList.add('lavka-kbzhu-highlighted');
+      } else {
+        card.classList.remove('lavka-kbzhu-highlighted');
+      }
+    } else {
+      card.classList.remove('lavka-kbzhu-highlighted');
+    }
+
     if (!html) return; // Если всё выключено в настройках
 
     kbzhuBox.innerHTML = html;
@@ -462,6 +517,7 @@
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
+      card.classList.remove('lavka-kbzhu-highlighted');
       const box = card.querySelector('.lavka-kbzhu-box');
       if (box) {
         if (kbzhuResizeObserver) kbzhuResizeObserver.unobserve(box);
@@ -653,6 +709,8 @@
         gap: 14px;
         color: var(--theme-text-primary, #212022);
         box-sizing: border-box;
+        max-height: 85vh;
+        overflow-y: auto;
       }
       .lavka-kbzhu-settings-panel.active {
         display: flex;
@@ -746,6 +804,11 @@
         text-align: center;
         margin-top: 4px;
       }
+
+      .lavka-kbzhu-highlighted {
+        box-shadow: 0 0 0 4px #fce000, 0 4px 12px rgba(252,224,0,0.4) !important;
+        border-radius: 12px;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -781,11 +844,11 @@
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-delay-input" title="Пауза между фоновыми запросами страниц товаров">Задержка запросов (мс):</label>
-        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="200" max="10000" step="100" value="${settings.requestDelayMs}" />
+        <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="0" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-cache-input" title="Срок хранения загруженных КБЖУ в памяти браузера">Время кэша (дней):</label>
-        <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="1" max="90" value="${settings.cacheExpirationDays}" />
+        <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="0" max="1000" value="${settings.cacheExpirationDays}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-100g-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-100g-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPer100g ? 'checked' : ''} /> Показывать на 100 г</label>
@@ -793,6 +856,38 @@
       <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-portion-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-portion-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.showPerPortion ? 'checked' : ''} /> Показывать на порцию</label>
       </div>
+      <hr style="margin: 4px 0; border: 0; border-top: 1px solid rgba(0,0,0,0.08);" />
+      <div style="font-weight: 600; font-size: 14px;">Подсветка товаров по КБЖУ</div>
+
+      <div class="lavka-kbzhu-setting-row">
+        <label for="kbzhu-highlight-enabled-chk"><input type="checkbox" id="kbzhu-highlight-enabled-chk" class="lavka-kbzhu-setting-checkbox" ${settings.highlightEnabled ? 'checked' : ''} /> Подсветить</label>
+      </div>
+
+      <div class="lavka-kbzhu-setting-row" style="justify-content: flex-start; gap: 15px;">
+        <label><input type="radio" name="kbzhu-highlight-mode" value="per100g" class="lavka-kbzhu-setting-checkbox" ${settings.highlightMode === 'per100g' ? 'checked' : ''} /> На 100 грамм</label>
+        <label><input type="radio" name="kbzhu-highlight-mode" value="perPortion" class="lavka-kbzhu-setting-checkbox" ${settings.highlightMode === 'perPortion' ? 'checked' : ''} /> На блюдо</label>
+      </div>
+
+      <div style="display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: center; font-size: 13px;">
+        <div></div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">от</div><div style="text-align: center; color: var(--theme-text-minor, #5d5d64);">до</div>
+
+        <div>Калории:</div>
+        <input type="number" id="hl-cal-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.from}" placeholder="0" />
+        <input type="number" id="hl-cal-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.calories.to}" placeholder="∞" />
+
+        <div>Белки:</div>
+        <input type="number" id="hl-prot-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.from}" placeholder="0" />
+        <input type="number" id="hl-prot-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.protein.to}" placeholder="∞" />
+
+        <div>Жиры:</div>
+        <input type="number" id="hl-fat-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.from}" placeholder="0" />
+        <input type="number" id="hl-fat-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.fat.to}" placeholder="∞" />
+
+        <div>Углеводы:</div>
+        <input type="number" id="hl-carb-from" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.from}" placeholder="0" />
+        <input type="number" id="hl-carb-to" min="0" class="lavka-kbzhu-setting-input" style="width: 100%;" value="${settings.highlightCriteria.carbohydrate.to}" placeholder="∞" />
+      </div>
+
       <div class="lavka-kbzhu-info-text">
         Загружено товаров в кэш: <span id="kbzhu-cache-count">${cacheCount}</span>
       </div>
@@ -824,6 +919,7 @@
         // Сбрасываем статус обработки на карточках в DOM
         document.querySelectorAll('[data-kbzhu-status]').forEach(card => {
           card.removeAttribute('data-kbzhu-status');
+          card.classList.remove('lavka-kbzhu-highlighted');
           const box = card.querySelector('.lavka-kbzhu-box');
           if (box) box.remove();
         });
@@ -832,12 +928,49 @@
     });
 
     document.getElementById('kbzhu-save-btn').addEventListener('click', () => {
+      const clamp = (val, min, max, fallback) => {
+        if (isNaN(val)) return fallback;
+        if (val < min) return min;
+        if (val > max) return max;
+        return val;
+      };
+
+      const sanitizeHighlight = (val) => {
+        if (val === '') return '';
+        const num = parseFloat(val);
+        if (isNaN(num) || num < 0) return '0';
+        return val;
+      };
+
+      const delayInput = parseInt(document.getElementById('kbzhu-delay-input').value);
+      const cacheInput = parseInt(document.getElementById('kbzhu-cache-input').value);
+
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
-        requestDelayMs: parseInt(document.getElementById('kbzhu-delay-input').value) || 1000,
-        cacheExpirationDays: parseInt(document.getElementById('kbzhu-cache-input').value) || 7,
+        requestDelayMs: clamp(delayInput, 0, 10000, 1000),
+        cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
-        showPerPortion: document.getElementById('kbzhu-portion-chk').checked
+        showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
+        highlightEnabled: document.getElementById('kbzhu-highlight-enabled-chk').checked,
+        highlightMode: document.querySelector('input[name="kbzhu-highlight-mode"]:checked').value,
+        highlightCriteria: {
+          calories: {
+            from: sanitizeHighlight(document.getElementById('hl-cal-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-cal-to').value)
+          },
+          protein: {
+            from: sanitizeHighlight(document.getElementById('hl-prot-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-prot-to').value)
+          },
+          fat: {
+            from: sanitizeHighlight(document.getElementById('hl-fat-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-fat-to').value)
+          },
+          carbohydrate: {
+            from: sanitizeHighlight(document.getElementById('hl-carb-from').value),
+            to: sanitizeHighlight(document.getElementById('hl-carb-to').value)
+          }
+        }
       };
       saveSettings(newSettings);
       panel.classList.remove('active');
@@ -848,16 +981,17 @@
       }
 
       // Принудительно перерисовываем все карточки в DOM
-      const cache = getCache();
       document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
         const link = card.querySelector('a[data-type="product-card-link"]') || card.querySelector('a[href*="/good/"]');
         if (link) {
           const slug = getSlugFromUrl(link.href);
-          if (slug && cache[slug]) {
-            renderKbzhu(card, cache[slug]);
+          const cachedData = getFromCache(slug);
+          if (slug && cachedData) {
+            renderKbzhu(card, cachedData);
           } else if (slug) {
-            // Если КБЖУ нет в кэше, сбрасываем статус, чтобы скрипт перезапросил данные при необходимости
+            // Если КБЖУ нет в кэше (или срок истек/равен 0), сбрасываем статус, чтобы скрипт перезапросил данные
             card.removeAttribute('data-kbzhu-status');
+            card.classList.remove('lavka-kbzhu-highlighted');
             const box = card.querySelector('.lavka-kbzhu-box');
             if (box) box.remove();
           }
