@@ -223,6 +223,8 @@
   const fetchQueue = [];
   const inFlightSlugs = new Set();
   let activeRequests = 0;
+  let lastRequestTime = 0;
+  let isStartScheduled = false;
 
   function addToQueue(slug) {
     if (!isKbzhuEnabled()) return;
@@ -235,23 +237,47 @@
     if (!isKbzhuEnabled()) {
       fetchQueue.length = 0;
       inFlightSlugs.clear();
+      isStartScheduled = false;
       return;
     }
 
+    if (fetchQueue.length === 0 || isStartScheduled) return;
+
     const settings = getSettings();
-    while (fetchQueue.length > 0 && activeRequests < settings.maxConcurrentRequests) {
+    if (activeRequests >= settings.maxConcurrentRequests) return;
+
+    const now = Date.now();
+    const timeSinceLast = now - lastRequestTime;
+
+    if (timeSinceLast >= settings.requestDelayMs) {
+      // Можем запускать сразу
+      lastRequestTime = now;
       activeRequests++;
       processNextInQueue();
+      // Если остались слоты и задачи, пытаемся запланировать следующий запуск
+      if (fetchQueue.length > 0 && activeRequests < settings.maxConcurrentRequests) {
+        scheduleNextTrigger();
+      }
+    } else {
+      // Планируем запуск после оставшегося времени задержки
+      scheduleNextTrigger(settings.requestDelayMs - timeSinceLast);
     }
   }
 
+  function scheduleNextTrigger(delay = getSettings().requestDelayMs) {
+    if (isStartScheduled) return;
+    isStartScheduled = true;
+    setTimeout(() => {
+      isStartScheduled = false;
+      triggerQueueProcessing();
+    }, delay);
+  }
+
   async function processNextInQueue() {
-    if (!isKbzhuEnabled() || fetchQueue.length === 0) {
+    if (!isKbzhuEnabled()) {
       activeRequests--;
-      if (!isKbzhuEnabled()) {
-        fetchQueue.length = 0;
-        inFlightSlugs.clear();
-      }
+      fetchQueue.length = 0;
+      inFlightSlugs.clear();
       return;
     }
 
@@ -283,14 +309,10 @@
       updateCardsForSlug(slug, null, 'error');
     } finally {
       inFlightSlugs.delete(slug);
+      activeRequests--;
       if (isKbzhuEnabled()) {
-        const settings = getSettings();
-        setTimeout(() => {
-          activeRequests--;
-          triggerQueueProcessing();
-        }, settings.requestDelayMs);
+        triggerQueueProcessing();
       } else {
-        activeRequests--;
         fetchQueue.length = 0;
         inFlightSlugs.clear();
       }
