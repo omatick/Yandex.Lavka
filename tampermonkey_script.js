@@ -233,7 +233,6 @@
   function triggerQueueProcessing() {
     if (!isKbzhuEnabled()) {
       fetchQueue.length = 0;
-      activeRequests = 0;
       return;
     }
 
@@ -275,11 +274,14 @@
       console.error(`[KbzhuScript] Ошибка получения КБЖУ для ${slug}:`, err);
       updateCardsForSlug(slug, null, 'error');
     } finally {
-      activeRequests--;
       if (isKbzhuEnabled()) {
         const settings = getSettings();
-        setTimeout(triggerQueueProcessing, settings.requestDelayMs);
+        setTimeout(() => {
+          activeRequests--;
+          triggerQueueProcessing();
+        }, settings.requestDelayMs);
       } else {
+        activeRequests--;
         fetchQueue.length = 0;
       }
     }
@@ -528,7 +530,6 @@
 
   function removeKbzhuFromCards() {
     fetchQueue.length = 0;
-    activeRequests = 0;
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
