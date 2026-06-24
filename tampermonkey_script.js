@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Яндекс Лавка — КБЖУ в каталоге
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Отображает калорийность, белки, жиры и углеводы (КБЖУ) прямо в карточках товаров каталога Яндекс Лавки. Включает кэширование, ограничение частоты запросов для защиты от блокировок и панель настроек.
 // @author       Antigravity
 // @match        *://*.lavka.yandex.ru/*
@@ -19,6 +19,7 @@
   const DEFAULT_SETTINGS = {
     enabled: true,
     requestDelayMs: 1000,// Задержка между запросами для предотвращения капчи/бана
+    maxConcurrentRequests: 3, // Количество одновременно обрабатываемых карточек
     cacheExpirationDays: 7,
     showPer100g: true,// Показывать КБЖУ на 100 грамм
     showPerPortion: true,// Показывать КБЖУ на порцию (если доступно)
@@ -220,11 +221,14 @@
 
   // --- Очередь запросов с ограничением частоты (Rate Limiter) ---
   const fetchQueue = [];
-  let isProcessingQueue = false;
+  const inFlightSlugs = new Set();
+  let activeRequests = 0;
+  let lastRequestTime = 0;
+  let isStartScheduled = false;
 
   function addToQueue(slug) {
     if (!isKbzhuEnabled()) return;
-    if (fetchQueue.includes(slug)) return;
+    if (fetchQueue.includes(slug) || inFlightSlugs.has(slug)) return;
     fetchQueue.push(slug);
     triggerQueueProcessing();
   }
@@ -232,33 +236,56 @@
   function triggerQueueProcessing() {
     if (!isKbzhuEnabled()) {
       fetchQueue.length = 0;
-      isProcessingQueue = false;
+      isStartScheduled = false;
       return;
     }
-    if (isProcessingQueue) return;
-    processNextInQueue();
+
+    if (fetchQueue.length === 0 || isStartScheduled) return;
+
+    const settings = getSettings();
+    if (activeRequests >= settings.maxConcurrentRequests) return;
+
+    const now = Date.now();
+    const timeSinceLast = now - lastRequestTime;
+
+    if (timeSinceLast >= settings.requestDelayMs) {
+      // Можем запускать сразу
+      lastRequestTime = now;
+      activeRequests++;
+      processNextInQueue();
+      // Если остались слоты и задачи, пытаемся запланировать следующий запуск
+      if (fetchQueue.length > 0 && activeRequests < settings.maxConcurrentRequests) {
+        scheduleNextTrigger();
+      }
+    } else {
+      // Планируем запуск после оставшегося времени задержки
+      scheduleNextTrigger(settings.requestDelayMs - timeSinceLast);
+    }
+  }
+
+  function scheduleNextTrigger(delay = getSettings().requestDelayMs) {
+    if (isStartScheduled) return;
+    isStartScheduled = true;
+    setTimeout(() => {
+      isStartScheduled = false;
+      triggerQueueProcessing();
+    }, delay);
   }
 
   async function processNextInQueue() {
     if (!isKbzhuEnabled()) {
+      activeRequests--;
       fetchQueue.length = 0;
-      isProcessingQueue = false;
       return;
     }
 
-    if (fetchQueue.length === 0) {
-      isProcessingQueue = false;
-      return;
-    }
-
-    isProcessingQueue = true;
     const slug = fetchQueue.shift();
+    inFlightSlugs.add(slug);
 
     try {
       const kbzhuData = await fetchProductKbzhu(slug);
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
-        isProcessingQueue = false;
         return;
       }
       if (kbzhuData) {
@@ -272,20 +299,19 @@
     } catch (err) {
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
-        isProcessingQueue = false;
         return;
       }
       console.error(`[KbzhuScript] Ошибка получения КБЖУ для ${slug}:`, err);
       updateCardsForSlug(slug, null, 'error');
+    } finally {
+      inFlightSlugs.delete(slug);
+      activeRequests--;
+      if (isKbzhuEnabled()) {
+        triggerQueueProcessing();
+      } else {
+        fetchQueue.length = 0;
+      }
     }
-
-    const settings = getSettings();
-    if (settings.enabled === false) {
-      fetchQueue.length = 0;
-      isProcessingQueue = false;
-      return;
-    }
-    setTimeout(processNextInQueue, settings.requestDelayMs);
   }
 
   function updateCardsForSlug(slug, kbzhuData, status) {
@@ -531,7 +557,6 @@
 
   function removeKbzhuFromCards() {
     fetchQueue.length = 0;
-    isProcessingQueue = false;
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
@@ -869,6 +894,10 @@
         <input type="number" id="kbzhu-delay-input" class="lavka-kbzhu-setting-input" min="0" max="10000" step="100" value="${settings.requestDelayMs}" />
       </div>
       <div class="lavka-kbzhu-setting-row">
+        <label for="kbzhu-threads-input" title="Количество одновременных фоновых запросов к товарам">Потоков парсинга:</label>
+        <input type="number" id="kbzhu-threads-input" class="lavka-kbzhu-setting-input" min="1" max="10" step="1" value="${settings.maxConcurrentRequests}" />
+      </div>
+      <div class="lavka-kbzhu-setting-row">
         <label for="kbzhu-cache-input" title="Срок хранения загруженных КБЖУ в памяти браузера">Время кэша (дней):</label>
         <input type="number" id="kbzhu-cache-input" class="lavka-kbzhu-setting-input" min="0" max="1000" value="${settings.cacheExpirationDays}" />
       </div>
@@ -968,11 +997,13 @@
       };
 
       const delayInput = parseInt(document.getElementById('kbzhu-delay-input').value);
+      const threadsInput = parseInt(document.getElementById('kbzhu-threads-input').value);
       const cacheInput = parseInt(document.getElementById('kbzhu-cache-input').value);
 
       const newSettings = {
         enabled: document.getElementById('kbzhu-enabled-chk').checked,
         requestDelayMs: clamp(delayInput, 0, 10000, 1000),
+        maxConcurrentRequests: clamp(threadsInput, 1, 10, 3),
         cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
