@@ -221,11 +221,12 @@
 
   // --- Очередь запросов с ограничением частоты (Rate Limiter) ---
   const fetchQueue = [];
+  const inFlightSlugs = new Set();
   let activeRequests = 0;
 
   function addToQueue(slug) {
     if (!isKbzhuEnabled()) return;
-    if (fetchQueue.includes(slug)) return;
+    if (fetchQueue.includes(slug) || inFlightSlugs.has(slug)) return;
     fetchQueue.push(slug);
     triggerQueueProcessing();
   }
@@ -233,6 +234,7 @@
   function triggerQueueProcessing() {
     if (!isKbzhuEnabled()) {
       fetchQueue.length = 0;
+      inFlightSlugs.clear();
       return;
     }
 
@@ -246,16 +248,21 @@
   async function processNextInQueue() {
     if (!isKbzhuEnabled() || fetchQueue.length === 0) {
       activeRequests--;
-      if (!isKbzhuEnabled()) fetchQueue.length = 0;
+      if (!isKbzhuEnabled()) {
+        fetchQueue.length = 0;
+        inFlightSlugs.clear();
+      }
       return;
     }
 
     const slug = fetchQueue.shift();
+    inFlightSlugs.add(slug);
 
     try {
       const kbzhuData = await fetchProductKbzhu(slug);
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
+        inFlightSlugs.clear();
         return;
       }
       if (kbzhuData) {
@@ -269,11 +276,13 @@
     } catch (err) {
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
+        inFlightSlugs.clear();
         return;
       }
       console.error(`[KbzhuScript] Ошибка получения КБЖУ для ${slug}:`, err);
       updateCardsForSlug(slug, null, 'error');
     } finally {
+      inFlightSlugs.delete(slug);
       if (isKbzhuEnabled()) {
         const settings = getSettings();
         setTimeout(() => {
@@ -283,6 +292,7 @@
       } else {
         activeRequests--;
         fetchQueue.length = 0;
+        inFlightSlugs.clear();
       }
     }
   }
@@ -530,6 +540,7 @@
 
   function removeKbzhuFromCards() {
     fetchQueue.length = 0;
+    inFlightSlugs.clear();
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
