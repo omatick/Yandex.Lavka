@@ -236,7 +236,6 @@
   function triggerQueueProcessing() {
     if (!isKbzhuEnabled()) {
       fetchQueue.length = 0;
-      inFlightSlugs.clear();
       isStartScheduled = false;
       return;
     }
@@ -277,7 +276,6 @@
     if (!isKbzhuEnabled()) {
       activeRequests--;
       fetchQueue.length = 0;
-      inFlightSlugs.clear();
       return;
     }
 
@@ -288,7 +286,6 @@
       const kbzhuData = await fetchProductKbzhu(slug);
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
-        inFlightSlugs.clear();
         return;
       }
       if (kbzhuData) {
@@ -302,7 +299,6 @@
     } catch (err) {
       if (!isKbzhuEnabled()) {
         fetchQueue.length = 0;
-        inFlightSlugs.clear();
         return;
       }
       console.error(`[KbzhuScript] Ошибка получения КБЖУ для ${slug}:`, err);
@@ -314,7 +310,6 @@
         triggerQueueProcessing();
       } else {
         fetchQueue.length = 0;
-        inFlightSlugs.clear();
       }
     }
   }
@@ -562,7 +557,6 @@
 
   function removeKbzhuFromCards() {
     fetchQueue.length = 0;
-    inFlightSlugs.clear();
     document.querySelectorAll('[data-testid="product-card"], div[class*="ProductSnippet__"]').forEach(card => {
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
