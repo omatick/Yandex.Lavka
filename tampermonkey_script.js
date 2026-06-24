@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Яндекс Лавка — КБЖУ в каталоге
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Отображает калорийность, белки, жиры и углеводы (КБЖУ) прямо в карточках товаров каталога Яндекс Лавки. Включает кэширование, ограничение частоты запросов для защиты от блокировок и панель настроек.
 // @author       Antigravity
 // @match        *://*.lavka.yandex.ru/*
@@ -22,7 +22,7 @@
     cacheExpirationDays: 7,
     showPer100g: true,// Показывать КБЖУ на 100 грамм
     showPerPortion: true,// Показывать КБЖУ на порцию (если доступно)
-    highlightEnabled: false,
+    highlightAction: 'none', // 'none', 'highlight', 'hide'
     highlightMode: 'perPortion', // 'per100g' or 'perPortion'
     highlightCriteria: {
       calories: { from: '', to: '' },
@@ -48,6 +48,13 @@
       const stored = localStorage.getItem(SETTINGS_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
+
+        // Миграция со старого формата
+        if (parsed.highlightEnabled !== undefined && parsed.highlightAction === undefined) {
+          parsed.highlightAction = parsed.highlightEnabled ? 'highlight' : 'none';
+          delete parsed.highlightEnabled;
+        }
+
         return {
           ...DEFAULT_SETTINGS,
           ...parsed,
@@ -410,9 +417,9 @@
       `;
     }
 
-    // Apply Highlight
-    if (settings.highlightEnabled) {
-      let isHighlighted = true;
+    // Apply Highlight or Hide
+    if (settings.highlightAction !== 'none') {
+      let isMatch = true;
       const targetMode = settings.highlightMode; // 'per100g' or 'perPortion'
 
       const checkCriteria = (paramName, criteria) => {
@@ -433,18 +440,29 @@
         return true;
       };
 
-      if (!checkCriteria('calories', settings.highlightCriteria.calories)) isHighlighted = false;
-      if (!checkCriteria('protein', settings.highlightCriteria.protein)) isHighlighted = false;
-      if (!checkCriteria('fat', settings.highlightCriteria.fat)) isHighlighted = false;
-      if (!checkCriteria('carbohydrate', settings.highlightCriteria.carbohydrate)) isHighlighted = false;
+      if (!checkCriteria('calories', settings.highlightCriteria.calories)) isMatch = false;
+      if (!checkCriteria('protein', settings.highlightCriteria.protein)) isMatch = false;
+      if (!checkCriteria('fat', settings.highlightCriteria.fat)) isMatch = false;
+      if (!checkCriteria('carbohydrate', settings.highlightCriteria.carbohydrate)) isMatch = false;
 
-      if (isHighlighted) {
-        card.classList.add('lavka-kbzhu-highlighted');
-      } else {
+      if (settings.highlightAction === 'highlight') {
+        if (isMatch) {
+          card.classList.add('lavka-kbzhu-highlighted');
+        } else {
+          card.classList.remove('lavka-kbzhu-highlighted');
+        }
+        card.classList.remove('lavka-kbzhu-hidden');
+      } else if (settings.highlightAction === 'hide') {
+        if (!isMatch) {
+          card.classList.add('lavka-kbzhu-hidden');
+        } else {
+          card.classList.remove('lavka-kbzhu-hidden');
+        }
         card.classList.remove('lavka-kbzhu-highlighted');
       }
     } else {
       card.classList.remove('lavka-kbzhu-highlighted');
+      card.classList.remove('lavka-kbzhu-hidden');
     }
 
     if (!html) return; // Если всё выключено в настройках
@@ -518,6 +536,7 @@
       intersectionObserver.unobserve(card);
       card.removeAttribute('data-kbzhu-status');
       card.classList.remove('lavka-kbzhu-highlighted');
+      card.classList.remove('lavka-kbzhu-hidden');
       const box = card.querySelector('.lavka-kbzhu-box');
       if (box) {
         if (kbzhuResizeObserver) kbzhuResizeObserver.unobserve(box);
@@ -809,6 +828,9 @@
         box-shadow: 0 0 0 4px #fce000, 0 4px 12px rgba(252,224,0,0.4) !important;
         border-radius: 12px;
       }
+      .lavka-kbzhu-hidden {
+        display: none !important;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -859,8 +881,10 @@
       <hr style="margin: 4px 0; border: 0; border-top: 1px solid rgba(0,0,0,0.08);" />
       <div style="font-weight: 600; font-size: 14px;">Подсветка товаров по КБЖУ</div>
 
-      <div class="lavka-kbzhu-setting-row">
-        <label for="kbzhu-highlight-enabled-chk" style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="checkbox" id="kbzhu-highlight-enabled-chk" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: checkbox !important; -webkit-appearance: checkbox !important; -moz-appearance: checkbox !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.highlightEnabled ? 'checked' : ''} /> Подсветить</label>
+      <div class="lavka-kbzhu-setting-row" style="justify-content: flex-start; gap: 15px; flex-wrap: wrap;">
+        <label style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="radio" name="kbzhu-highlight-action" value="none" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; border-radius: 50% !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: radio !important; -webkit-appearance: radio !important; -moz-appearance: radio !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.highlightAction === 'none' ? 'checked' : ''} /> Выключить</label>
+        <label style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="radio" name="kbzhu-highlight-action" value="highlight" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; border-radius: 50% !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: radio !important; -webkit-appearance: radio !important; -moz-appearance: radio !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.highlightAction === 'highlight' ? 'checked' : ''} /> Подсветить</label>
+        <label style="display: flex !important; align-items: center !important; gap: 8px !important; cursor: pointer !important; font-size: 13px !important; position: relative !important; left: auto !important; top: auto !important; opacity: 1 !important; visibility: visible !important; height: auto !important; width: auto !important; box-sizing: border-box !important; margin: 0 !important; padding: 0 !important;"><input type="radio" name="kbzhu-highlight-action" value="hide" class="lavka-kbzhu-setting-checkbox" style="display: inline-block !important; position: static !important; opacity: 1 !important; visibility: visible !important; width: 16px !important; height: 16px !important; min-width: 16px !important; min-height: 16px !important; max-width: 16px !important; max-height: 16px !important; margin: 0 8px 0 0 !important; padding: 0 !important; border: 1px solid #ccc !important; border-radius: 50% !important; clip: auto !important; -webkit-clip-path: none !important; clip-path: none !important; overflow: visible !important; transform: none !important; pointer-events: auto !important; appearance: radio !important; -webkit-appearance: radio !important; -moz-appearance: radio !important; accent-color: #fce000 !important; cursor: pointer !important;" ${settings.highlightAction === 'hide' ? 'checked' : ''} /> Скрыть</label>
       </div>
 
       <div class="lavka-kbzhu-setting-row" style="justify-content: flex-start; gap: 15px;">
@@ -920,6 +944,7 @@
         document.querySelectorAll('[data-kbzhu-status]').forEach(card => {
           card.removeAttribute('data-kbzhu-status');
           card.classList.remove('lavka-kbzhu-highlighted');
+          card.classList.remove('lavka-kbzhu-hidden');
           const box = card.querySelector('.lavka-kbzhu-box');
           if (box) box.remove();
         });
@@ -951,7 +976,7 @@
         cacheExpirationDays: clamp(cacheInput, 0, 1000, 7),
         showPer100g: document.getElementById('kbzhu-100g-chk').checked,
         showPerPortion: document.getElementById('kbzhu-portion-chk').checked,
-        highlightEnabled: document.getElementById('kbzhu-highlight-enabled-chk').checked,
+        highlightAction: document.querySelector('input[name="kbzhu-highlight-action"]:checked').value,
         highlightMode: document.querySelector('input[name="kbzhu-highlight-mode"]:checked').value,
         highlightCriteria: {
           calories: {
@@ -992,6 +1017,7 @@
             // Если КБЖУ нет в кэше (или срок истек/равен 0), сбрасываем статус, чтобы скрипт перезапросил данные
             card.removeAttribute('data-kbzhu-status');
             card.classList.remove('lavka-kbzhu-highlighted');
+            card.classList.remove('lavka-kbzhu-hidden');
             const box = card.querySelector('.lavka-kbzhu-box');
             if (box) box.remove();
           }
